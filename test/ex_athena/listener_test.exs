@@ -1,24 +1,14 @@
 defmodule ExAthena.ListenerTest do
   use ExUnit.Case
 
-  describe "start_link/2" do
-    defmodule GenServerTest do
-      @moduledoc false
-      use ExAthena.Listener, otp_app: :exathena_listener, host: "localhost", port: 6900
-    end
+  defmodule Listener do
+    @moduledoc false
+    use ExAthena.Listener, otp_app: :exathena_listener
 
-    setup do
-      {:ok, pid} = GenServerTest.start_link()
+    assert @otp_app == :exathena_listener
+  end
 
-      {:ok, pid: pid}
-    end
-
-    test "starts the packet listener", %{pid: pid} do
-      gen_server_test = GenServer.whereis(GenServerTest)
-
-      assert pid
-      assert gen_server_test
-      assert gen_server_test == pid
-    end
+  test "start_link/0 should returns the sockerl gen server" do
+    start_supervised!(Listener)
   end
 end

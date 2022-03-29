@@ -1,51 +1,87 @@
 defmodule ExAthena.Listener do
-  @moduledoc """
-  TODO: Some module docs
-  """
+  @moduledoc false
 
-  @doc """
-  TODO: Some macro docs
-  """
+  @doc false
   defmacro __using__(opts) do
-    quote bind_quoted: [opts: opts] do
-      @behaviour ExAthena.Listener
-
-      @using_options opts
+    quote bind_quoted: [opts: opts], location: :keep do
       @otp_app Keyword.fetch!(opts, :otp_app)
-      @default_dynamic_listener opts[:default_dynamic_listener] || __MODULE__
 
-      def config do
-        {:ok, config} =
-          ExAthena.Listener.Supervisor.runtime_config(:runtime, __MODULE__, @otp_app, [])
+      use GenServer
+      require Logger
 
-        config
+      @default_socket_options [:binary, active: false, reuseaddr: true]
+      @defaul_opts [handler: nil, socket_options: @default_socket_options, port: 6900]
+
+      defp __config__,
+        do: Application.get_env(@otp_app, __MODULE__, @defaul_opts)
+
+      defp config(key, default \\ nil) when is_atom(key),
+        do: Keyword.get(__config__(), key, default)
+
+      @impl true
+      def init(_args) do
+        port = config(:port, 6900)
+        options = config(:socket_options, @default_socket_options)
+
+        :gen_tcp.listen(port, options)
       end
 
-      def child_spec(opts) do
-        %{
+      def child_spec(listen_socket) do
+        default = %{
           id: __MODULE__,
-          start: {__MODULE__, :start_link, [opts]},
+          name: __MODULE__,
+          start: {__MODULE__, :start_link, [listen_socket]},
           type: :supervisor
         }
+
+        Supervisor.child_spec(default, [])
       end
 
-      def start_link(opts \\ []) do
-        opts = Keyword.merge(opts, @using_options)
-        ExAthena.Listener.Supervisor.start_link(__MODULE__, @otp_app, opts)
+      def start_link(state \\ nil) do
+        GenServer.start_link(__MODULE__, state, name: __MODULE__)
       end
 
-      @compile {:inline, get_dynamic_listener: 0}
+      def socket, do: GenServer.call(__MODULE__, :socket)
 
-      def get_dynamic_listener do
-        Process.get({__MODULE__, :dynamic_listener}, @default_dynamic_listener)
+      # Callbacks
+
+      @impl true
+      def handle_info({:tcp, socket, packet}, state) do
+        Logger.info("Received packet: #{inspect(packet)} and send response")
+        :gen_tcp.send(socket, "Hi from tcp server \n")
+        {:noreply, state}
       end
 
-      def put_dynamic_listener(dynamic) when is_atom(dynamic) or is_pid(dynamic) do
-        Process.put({__MODULE__, :dynamic_listener}, dynamic) || @default_dynamic_listener
+      @impl true
+      def handle_info({:tcp_closed, _socket}, state) do
+        Logger.info("Socket is closed")
+        {:stop, {:shutdown, "Socket is closed"}, state}
       end
 
-      def stop(timeout \\ 5000) do
-        Supervisor.stop(get_dynamic_listener(), :normal, timeout)
+      @impl true
+      def handle_info({:tcp_error, _socket, reason}, state) do
+        Logger.error("Tcp error: #{inspect(reason)}")
+        {:stop, {:shutdown, "Tcp error: #{inspect(reason)}"}, state}
+      end
+
+      @impl true
+      def handle_call(:socket, _from, state) do
+        {:reply, state, state}
+      end
+
+      @impl true
+      def format_status(_reason, _state) do
+        :ok
+      end
+
+      @impl true
+      def terminate(_reason, _state) do
+        :ok
+      end
+
+      @impl true
+      def code_change(_old_version, state, _extra) do
+        {:ok, state}
       end
     end
   end
