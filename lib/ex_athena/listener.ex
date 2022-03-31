@@ -9,6 +9,8 @@ defmodule ExAthena.Listener do
       use GenServer
       require Logger
 
+      alias ExAthena.Listener.Handler
+
       @default_socket_options [
         :binary,
         packet: 0,
@@ -37,17 +39,6 @@ defmodule ExAthena.Listener do
         end
       end
 
-      def child_spec(listen_socket) do
-        default = %{
-          id: __MODULE__,
-          name: __MODULE__,
-          start: {__MODULE__, :start_link, [listen_socket]},
-          type: :supervisor
-        }
-
-        Supervisor.child_spec(default, [])
-      end
-
       def start_link do
         GenServer.start_link(__MODULE__, [], name: __MODULE__)
       end
@@ -56,7 +47,7 @@ defmodule ExAthena.Listener do
 
       @impl true
       def handle_info(:accept, state = %{socket: listen_socket, handler: handler}) do
-        ExAthena.Listener.__listening__(listen_socket, handler)
+        Handler.start_listening(listen_socket, handler)
         {:noreply, state}
       end
 
