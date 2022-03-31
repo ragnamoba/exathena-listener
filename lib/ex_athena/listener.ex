@@ -9,7 +9,13 @@ defmodule ExAthena.Listener do
       use GenServer
       require Logger
 
-      @default_socket_options [:binary, active: false, reuseaddr: true]
+      @default_socket_options [
+        :binary,
+        packet: 0,
+        active: false,
+        reuseaddr: true
+      ]
+
       @defaul_opts [handler: nil, socket_options: @default_socket_options, port: 6900]
 
       defp __config__,
@@ -20,10 +26,15 @@ defmodule ExAthena.Listener do
 
       @impl true
       def init(_args) do
+        pid = self()
         port = config(:port, 6900)
         options = config(:socket_options, @default_socket_options)
+        handler = config(:handler, :noop)
 
-        :gen_tcp.listen(port, options)
+        with {:ok, listen_socket} <- :gen_tcp.listen(port, options) do
+          send(pid, :accept)
+          {:ok, %{port: port, socket: listen_socket, handler: handler}}
+        end
       end
 
       def child_spec(listen_socket) do
@@ -37,36 +48,16 @@ defmodule ExAthena.Listener do
         Supervisor.child_spec(default, [])
       end
 
-      def start_link(state \\ nil) do
-        GenServer.start_link(__MODULE__, state, name: __MODULE__)
+      def start_link do
+        GenServer.start_link(__MODULE__, [], name: __MODULE__)
       end
-
-      def socket, do: GenServer.call(__MODULE__, :socket)
 
       # Callbacks
 
       @impl true
-      def handle_info({:tcp, socket, packet}, state) do
-        Logger.info("Received packet: #{inspect(packet)} and send response")
-        :gen_tcp.send(socket, "Hi from tcp server \n")
+      def handle_info(:accept, state = %{socket: listen_socket, handler: handler}) do
+        ExAthena.Listener.__listening__(listen_socket, handler)
         {:noreply, state}
-      end
-
-      @impl true
-      def handle_info({:tcp_closed, _socket}, state) do
-        Logger.info("Socket is closed")
-        {:stop, {:shutdown, "Socket is closed"}, state}
-      end
-
-      @impl true
-      def handle_info({:tcp_error, _socket, reason}, state) do
-        Logger.error("Tcp error: #{inspect(reason)}")
-        {:stop, {:shutdown, "Tcp error: #{inspect(reason)}"}, state}
-      end
-
-      @impl true
-      def handle_call(:socket, _from, state) do
-        {:reply, state, state}
       end
 
       @impl true
@@ -85,4 +76,25 @@ defmodule ExAthena.Listener do
       end
     end
   end
+
+  @doc false
+  def __listening__(listen_socket, handler) when is_port(listen_socket) and is_atom(handler) do
+    with {:ok, client_socket} <- :gen_tcp.accept(listen_socket) do
+      IO.puts("Received connection: " <> inspect(client_socket))
+
+      __route_socket__(client_socket)
+    end
+
+    __listening__(listen_socket, handler)
+  end
+
+  defp __route_socket__(client_socket) when is_port(client_socket) do
+    client_socket
+    |> :gen_tcp.recv(0)
+    |> IO.inspect(label: inspect(client_socket))
+  end
+end
+
+defmodule Alo do
+  use ExAthena.Listener, otp_app: :exathena_listener
 end
