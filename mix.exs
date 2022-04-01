@@ -36,12 +36,12 @@ defmodule ExAthena.Listener.MixProject do
   end
 
   # Specifies which paths to compile per environment.
-  defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
   def application do
     [
-      extra_applications: [:runtime_tools, :logger, :telemetry]
+      extra_applications: [:runtime_tools, :logger, :telemetry],
+      mod: {ExAthena.Listener, []}
     ]
   end
 

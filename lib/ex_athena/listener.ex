@@ -1,5 +1,15 @@
 defmodule ExAthena.Listener do
   @moduledoc false
+  use Application
+
+  @doc false
+  def start(_type, _args) do
+    children = [
+      {DynamicSupervisor, strategy: :one_for_one, name: ExAthena.Listener.Supervisor}
+    ]
+
+    Supervisor.start_link(children, strategy: :one_for_one)
+  end
 
   @doc false
   defmacro __using__(opts) do
@@ -20,22 +30,24 @@ defmodule ExAthena.Listener do
 
       @defaul_opts [handler: nil, socket_options: @default_socket_options, port: 6900]
 
-      defp __config__,
-        do: Application.get_env(@otp_app, __MODULE__, @defaul_opts)
+      defp __config__ do
+        config = Application.get_env(@otp_app, __MODULE__, [])
+
+        Keyword.merge(@defaul_opts, config)
+      end
 
       defp config(key, default \\ nil) when is_atom(key),
         do: Keyword.get(__config__(), key, default)
 
       @impl true
       def init(_args) do
-        pid = self()
+        Application.put_env(@otp_app, __MODULE__, __config__())
+
         port = config(:port, 6900)
         options = config(:socket_options, @default_socket_options)
-        handler = config(:handler, :noop)
 
         with {:ok, listen_socket} <- :gen_tcp.listen(port, options) do
-          send(pid, :accept)
-          {:ok, %{port: port, socket: listen_socket, handler: handler}}
+          {:ok, listen_socket, {:continue, :loop_acceptor}}
         end
       end
 
@@ -46,9 +58,14 @@ defmodule ExAthena.Listener do
       # Callbacks
 
       @impl true
-      def handle_info(:accept, state = %{socket: listen_socket, handler: handler}) do
-        Handler.start_listening(listen_socket, handler)
-        {:noreply, state}
+      def handle_continue(:loop_acceptor, listen_socket) do
+        send(self(), :accept)
+        {:noreply, listen_socket}
+      end
+
+      @impl true
+      def handle_info(:accept, listen_socket) do
+        Handler.start_listening(@otp_app, __MODULE__, listen_socket)
       end
 
       @impl true
@@ -69,23 +86,10 @@ defmodule ExAthena.Listener do
   end
 
   @doc false
-  def __listening__(listen_socket, handler) when is_port(listen_socket) and is_atom(handler) do
-    with {:ok, client_socket} <- :gen_tcp.accept(listen_socket) do
-      IO.puts("Received connection: " <> inspect(client_socket))
-
-      __route_socket__(client_socket)
-    end
-
-    __listening__(listen_socket, handler)
+  @spec get_config(atom(), atom(), atom()) :: any()
+  def get_config(otp_app, mod, key) do
+    otp_app
+    |> Application.get_env(mod, [])
+    |> Keyword.get(key)
   end
-
-  defp __route_socket__(client_socket) when is_port(client_socket) do
-    client_socket
-    |> :gen_tcp.recv(0)
-    |> IO.inspect(label: inspect(client_socket))
-  end
-end
-
-defmodule Alo do
-  use ExAthena.Listener, otp_app: :exathena_listener
 end

@@ -1,14 +1,19 @@
 defmodule ExAthena.ListenerTest do
   use ExUnit.Case
 
-  defmodule Listener do
-    @moduledoc false
-    use ExAthena.Listener, otp_app: :exathena_listener
+  alias ExAthena.Listener
 
-    assert @otp_app == :exathena_listener
+  test "start_link/0 should returns the listener genserver" do
+    assert {:ok, _pid} = MyListener.start_link()
   end
 
-  test "start_link/0 should returns the sockerl gen server" do
-    start_supervised!(Listener)
+  describe "get_config/3" do
+    test "gets the handler from config" do
+      assert Listener.get_config(:exathena_listener, MyListener, :handler) == MyHandler
+    end
+
+    test "gets nil from unknown key" do
+      refute Listener.get_config(:exathena_listener, MyListener, :foo)
+    end
   end
 end
