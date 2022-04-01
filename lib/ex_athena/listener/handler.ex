@@ -56,7 +56,7 @@ defmodule ExAthena.Listener.Handler do
   defp do_start_listening(listen_socket, handler)
        when is_port(listen_socket) and is_atom(handler) do
     with {:ok, client_socket} <- :gen_tcp.accept(listen_socket) do
-      :ok = start_handler(client_socket, handler)
+      start_handler(client_socket, handler)
     end
 
     do_start_listening(listen_socket, handler)

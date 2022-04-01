@@ -21,13 +21,7 @@ defmodule ExAthena.Listener do
 
       alias ExAthena.Listener.Handler
 
-      @default_socket_options [
-        :binary,
-        packet: 0,
-        active: false,
-        reuseaddr: true
-      ]
-
+      @default_socket_options [:binary, active: false, reuseaddr: true]
       @defaul_opts [handler: nil, socket_options: @default_socket_options, port: 6900]
 
       defp __config__ do
