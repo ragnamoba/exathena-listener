@@ -11,31 +11,38 @@ defmodule ExAthena.Listener.Router do
   defmodule MyApp.Router do
     use ExAthena.Listener.Router
 
-    packet "0x67",
+    packet 0x67,
       schema: MyApp.Packet1,
       controller: MyApp.MyController,
       action: :authenticate
 
-    packet "0x241",
+    packet 0x241,
       schema: MyApp.LoginPacket,
       controller: MyApp.AnotherController,
       action: :update
   end
   ```
 
-  Each application using ExAthena Listener must
-  have only one router.
+  Each ExAthena Listener must have only one router.
 
-  You need to inform ExAthena where is your Router
+  You need to inform ExAthena Listener where is your Router
   using application configurations, as bellow:
 
   ```elixir
-  config :exathena_listener,
+  config :exathena_listener, MyListener,
     router: MyApp.Router
   ```
 
   For more details, see `packet/2`
   """
+
+  defstruct ~w(schema controller action)a
+
+  @type t :: %__MODULE__{
+          schema: module(),
+          controller: module(),
+          action: atom()
+        }
 
   alias ExAthena.Listener.Router.{
     InvalidRouteAction,
@@ -60,7 +67,7 @@ defmodule ExAthena.Listener.Router do
   ### Config fields
 
   * `schema` - Represents a `struct` using
-  `ExAthena.Listener.Packet` which will be used to 
+  `ExAthena.Listener.Packet` which will be used to
   represent any received packet;
 
   * `controller` - Represents a function
@@ -87,12 +94,12 @@ defmodule ExAthena.Listener.Router do
           message: "Invalid controller! Controller must be a compiled"
       end
 
-      with {:error, _} <- Module.defines?(controller, {actions, 2}) do
+      with {:error, _} <- function_exported?(controller, action, 1) do
         raise InvalidRouteAction,
           message: "Invalid action! Action must be defined on given controller"
       end
 
-      @packets Map.put(@packets, packet_id, %{
+      @packets Map.put(@packets, packet_id, %ExAthena.Listener.Router{
                  schema: schema,
                  controller: controller,
                  action: action
@@ -107,7 +114,7 @@ defmodule ExAthena.Listener.Router do
             the packet controller and it's action to represent it,
             as bellow:
 
-              packet "0x32",
+              packet 0x32,
                 schema: MyApp.MessageSchema,
                 controller: MyApp.MyController,
                 action: :create
@@ -126,10 +133,13 @@ defmodule ExAthena.Listener.Router do
           nil ->
             {:error, {:packet_id, :not_found}}
 
-          route = %{schema: _} ->
+          route = %ExAthena.Listener.Router{} ->
             {:ok, route}
         end
       end
     end
   end
+
+  @doc false
+  def route(router, packet_id), do: router.__route__(packet_id)
 end
